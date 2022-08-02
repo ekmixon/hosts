@@ -65,9 +65,7 @@ class Base(unittest.TestCase):
 
     @property
     def sep(self):
-        if platform.system().lower() == "windows":
-            return "\\"
-        return os.sep
+        return "\\" if platform.system().lower() == "windows" else os.sep
 
     def assert_called_once(self, mock_method):
         self.assertEqual(mock_method.call_count, 1)
@@ -105,13 +103,13 @@ class TestGetDefaults(Base):
             actual = get_defaults()
             expected = {
                 "numberofrules": 0,
-                "datapath": "foo" + self.sep + "data",
+                "datapath": f"foo{self.sep}data",
                 "freshen": True,
                 "replace": False,
                 "backup": False,
                 "skipstatichosts": False,
                 "keepdomaincomments": True,
-                "extensionspath": "foo" + self.sep + "extensions",
+                "extensionspath": f"foo{self.sep}extensions",
                 "extensions": [],
                 "compress": False,
                 "minimise": False,
@@ -121,16 +119,17 @@ class TestGetDefaults(Base):
                 "sourcedatafilename": "update.json",
                 "sourcesdata": [],
                 "readmefilename": "readme.md",
-                "readmetemplate": ("foo" + self.sep + "readme_template.md"),
+                "readmetemplate": f"foo{self.sep}readme_template.md",
                 "readmedata": {},
-                "readmedatafilename": ("foo" + self.sep + "readmeData.json"),
+                "readmedatafilename": f"foo{self.sep}readmeData.json",
                 "exclusionpattern": r"([a-zA-Z\d-]+\.){0,}",
                 "exclusionregexes": [],
                 "exclusions": [],
                 "commonexclusions": ["hulu.com"],
-                "blacklistfile": "foo" + self.sep + "blacklist",
-                "whitelistfile": "foo" + self.sep + "whitelist",
+                "blacklistfile": f"foo{self.sep}blacklist",
+                "whitelistfile": f"foo{self.sep}whitelist",
             }
+
             self.assertDictEqual(actual, expected)
 
 
@@ -846,12 +845,12 @@ class TestNormalizeRule(BaseStdout):
             output = sys.stdout.getvalue()
             sys.stdout = StringIO()
 
-            expected = "==>" + rule + "<=="
+            expected = f"==>{rule}<=="
             self.assertIn(expected, output)
 
     def test_no_comments(self):
+        rule = "127.0.0.1 1.google.com foo"
         for target_ip in ("0.0.0.0", "127.0.0.1", "8.8.8.8"):
-            rule = "127.0.0.1 1.google.com foo"
             expected = ("1.google.com", str(target_ip) + " 1.google.com\n")
 
             actual = normalize_rule(
@@ -868,11 +867,12 @@ class TestNormalizeRule(BaseStdout):
     def test_with_comments(self):
         for target_ip in ("0.0.0.0", "127.0.0.1", "8.8.8.8"):
             for comment in ("foo", "bar", "baz"):
-                rule = "127.0.0.1 1.google.co.uk " + comment
+                rule = f"127.0.0.1 1.google.co.uk {comment}"
                 expected = (
                     "1.google.co.uk",
-                    (str(target_ip) + " 1.google.co.uk # " + comment + "\n"),
+                    f"{str(target_ip)} 1.google.co.uk # {comment}" + "\n",
                 )
+
 
                 actual = normalize_rule(
                     rule, target_ip=target_ip, keep_domain_comments=True
@@ -886,8 +886,8 @@ class TestNormalizeRule(BaseStdout):
                 sys.stdout = StringIO()
 
     def test_two_ips(self):
+        rule = "127.0.0.1 11.22.33.44 foo"
         for target_ip in ("0.0.0.0", "127.0.0.1", "8.8.8.8"):
-            rule = "127.0.0.1 11.22.33.44 foo"
             expected = ("11.22.33.44", str(target_ip) + " 11.22.33.44\n")
 
             actual = normalize_rule(
@@ -903,7 +903,7 @@ class TestNormalizeRule(BaseStdout):
 
     def test_no_comment_raw(self):
         for rule in ("twitter.com", "google.com", "foo.bar.edu"):
-            expected = (rule, "0.0.0.0 " + rule + "\n")
+            expected = rule, f"0.0.0.0 {rule}" + "\n"
 
             actual = normalize_rule(
                 rule, target_ip="0.0.0.0", keep_domain_comments=False
@@ -919,11 +919,12 @@ class TestNormalizeRule(BaseStdout):
     def test_with_comments_raw(self):
         for target_ip in ("0.0.0.0", "127.0.0.1", "8.8.8.8"):
             for comment in ("foo", "bar", "baz"):
-                rule = "1.google.co.uk " + comment
+                rule = f"1.google.co.uk {comment}"
                 expected = (
                     "1.google.co.uk",
-                    (str(target_ip) + " 1.google.co.uk # " + comment + "\n"),
+                    f"{str(target_ip)} 1.google.co.uk # {comment}" + "\n",
                 )
+
 
                 actual = normalize_rule(
                     rule, target_ip=target_ip, keep_domain_comments=True
@@ -993,7 +994,7 @@ class TestWriteOpeningHeader(BaseMockDir):
             extensions="", outputsubfolder="", numberofrules=5, skipstatichosts=False
         )
 
-        for k in kwargs.keys():
+        for k in kwargs:
             bad_kwargs = kwargs.copy()
             bad_kwargs.pop(k)
 
@@ -1183,7 +1184,7 @@ class TestUpdateReadmeData(BaseMockDir):
             extensions="", outputsubfolder="", numberofrules="", sourcesdata=""
         )
 
-        for k in kwargs.keys():
+        for k in kwargs:
             bad_kwargs = kwargs.copy()
             bad_kwargs.pop(k)
 
@@ -1200,15 +1201,16 @@ class TestUpdateReadmeData(BaseMockDir):
         )
         update_readme_data(self.readme_file, **kwargs)
 
-        if platform.system().lower() == "windows":
-            sep = "/"
-        else:
-            sep = self.sep
-
+        sep = "/" if platform.system().lower() == "windows" else self.sep
         expected = {
-            "base": {"location": "foo" + sep, "sourcesdata": "hosts", "entries": 5},
+            "base": {
+                "location": f"foo{sep}",
+                "sourcesdata": "hosts",
+                "entries": 5,
+            },
             "foo": "bar",
         }
+
 
         with open(self.readme_file, "r") as f:
             actual = json.load(f)
@@ -1223,14 +1225,11 @@ class TestUpdateReadmeData(BaseMockDir):
         )
         update_readme_data(self.readme_file, **kwargs)
 
-        if platform.system().lower() == "windows":
-            sep = "/"
-        else:
-            sep = self.sep
-
+        sep = "/" if platform.system().lower() == "windows" else self.sep
         expected = {
-            "base": {"location": "foo" + sep, "sourcesdata": "hosts", "entries": 5}
+            "base": {"location": f"foo{sep}", "sourcesdata": "hosts", "entries": 5}
         }
+
 
         with open(self.readme_file, "r") as f:
             actual = json.load(f)
@@ -1248,14 +1247,15 @@ class TestUpdateReadmeData(BaseMockDir):
         )
         update_readme_data(self.readme_file, **kwargs)
 
-        if platform.system().lower() == "windows":
-            sep = "/"
-        else:
-            sep = self.sep
-
+        sep = "/" if platform.system().lower() == "windows" else self.sep
         expected = {
-            "com-org": {"location": "foo" + sep, "sourcesdata": "hosts", "entries": 5}
+            "com-org": {
+                "location": f"foo{sep}",
+                "sourcesdata": "hosts",
+                "entries": 5,
+            }
         }
+
 
         with open(self.readme_file, "r") as f:
             actual = json.load(f)
@@ -1477,7 +1477,7 @@ class TestRemoveOldHostsFile(BaseMockDir):
             contents = f.read()
             self.assertEqual(contents, "")
 
-        new_hosts_file = self.hosts_file + "-new"
+        new_hosts_file = f"{self.hosts_file}-new"
 
         with open(new_hosts_file, "r") as f:
             contents = f.read()
@@ -1514,7 +1514,7 @@ class DomainToIDNA(Base):
         # Test with a space as separator.
         for i in range(len(self.domains)):
             data = (b"0.0.0.0 " + self.domains[i]).decode("utf-8")
-            expected = "0.0.0.0 " + self.expected_domains[i]
+            expected = f"0.0.0.0 {self.expected_domains[i]}"
 
             actual = domain_to_idna(data)
 
@@ -1533,7 +1533,7 @@ class DomainToIDNA(Base):
         # Test with multiple space as separator.
         for i in range(len(self.domains)):
             data = (b"0.0.0.0      " + self.domains[i]).decode("utf-8")
-            expected = "0.0.0.0      " + self.expected_domains[i]
+            expected = f"0.0.0.0      {self.expected_domains[i]}"
 
             actual = domain_to_idna(data)
 
@@ -1553,7 +1553,7 @@ class DomainToIDNA(Base):
         # Test with a space as separator.
         for i in range(len(self.domains)):
             data = (b"0.0.0.0 " + self.domains[i] + b" # Hello World").decode("utf-8")
-            expected = "0.0.0.0 " + self.expected_domains[i] + " # Hello World"
+            expected = f"0.0.0.0 {self.expected_domains[i]} # Hello World"
 
             actual = domain_to_idna(data)
 
@@ -1585,7 +1585,7 @@ class DomainToIDNA(Base):
             data = (b"0.0.0.0 " + self.domains[i] + b"  \t # Hello World").decode(
                 "utf-8"
             )
-            expected = "0.0.0.0 " + self.expected_domains[i] + "  \t # Hello World"
+            expected = f"0.0.0.0 {self.expected_domains[i]}" + "  \t # Hello World"
 
             actual = domain_to_idna(data)
 
@@ -1597,7 +1597,7 @@ class DomainToIDNA(Base):
             data = (b"0.0.0.0     " + self.domains[i] + b" \t # Hello World").decode(
                 "utf-8"
             )
-            expected = "0.0.0.0     " + self.expected_domains[i] + " \t # Hello World"
+            expected = f"0.0.0.0     {self.expected_domains[i]}" + " \t # Hello World"
 
             actual = domain_to_idna(data)
 
@@ -1660,9 +1660,7 @@ class GetFileByUrl(BaseStdout):
             return_value = get_file_by_url(test_url)
         self.assertIsNone(return_value)
         printed_output = sys.stdout.getvalue()
-        self.assertEqual(
-            printed_output, "Error retrieving data from {}\n".format(test_url)
-        )
+        self.assertEqual(printed_output, f"Error retrieving data from {test_url}\n")
 
     def test_invalid_url(self):
         test_url = "http://fe80::5054:ff:fe5a:fc0"  # leads to exception: InvalidURL
@@ -1672,9 +1670,7 @@ class GetFileByUrl(BaseStdout):
             return_value = get_file_by_url(test_url)
         self.assertIsNone(return_value)
         printed_output = sys.stdout.getvalue()
-        self.assertEqual(
-            printed_output, "Error retrieving data from {}\n".format(test_url)
-        )
+        self.assertEqual(printed_output, f"Error retrieving data from {test_url}\n")
 
 
 class TestWriteData(Base):
@@ -1814,13 +1810,7 @@ def mock_walk(stem):
     if stem == ".":
         stem = ""
 
-    matches = []
-
-    for f in files:
-        if not stem or f.startswith(stem + "/"):
-            matches.append(("", "_", [f]))
-
-    return matches
+    return [("", "_", [f]) for f in files if not stem or f.startswith(f"{stem}/")]
 
 
 class TestRecursiveGlob(Base):
@@ -1898,7 +1888,7 @@ class TestPathJoinRobust(Base):
     def test_join(self):
         for i in range(1, 4):
             paths = ["pathNew"] * i
-            expected = "path1" + (self.sep + "pathNew") * i
+            expected = "path1" + f"{self.sep}pathNew" * i
             actual = path_join_robust("path1", *paths)
 
             self.assertEqual(actual, expected)
@@ -1906,7 +1896,7 @@ class TestPathJoinRobust(Base):
     def test_join_unicode(self):
         for i in range(1, 4):
             paths = [u"pathNew"] * i
-            expected = "path1" + (self.sep + "pathNew") * i
+            expected = "path1" + f"{self.sep}pathNew" * i
             actual = path_join_robust("path1", *paths)
 
             self.assertEqual(actual, expected)
@@ -1956,7 +1946,7 @@ class TestSupportsColor(BaseStdout):
             sys.platform = "Linux"
 
             with self.mock_property("sys.stdout"):
-                sys.stdout = list()
+                sys.stdout = []
                 self.assertFalse(supports_color())
 
     def test_no_isatty(self):

@@ -246,13 +246,12 @@ def main():
     exclusion_regexes = settings["exclusionregexes"]
     source_data_filename = settings["sourcedatafilename"]
 
-    update_sources = prompt_for_update(freshen=settings["freshen"], update_auto=auto)
-    if update_sources:
+    if update_sources := prompt_for_update(
+        freshen=settings["freshen"], update_auto=auto
+    ):
         update_all_sources(source_data_filename, settings["hostfilename"])
 
-    gather_exclusions = prompt_for_exclusions(skip_prompt=auto)
-
-    if gather_exclusions:
+    if gather_exclusions := prompt_for_exclusions(skip_prompt=auto):
         common_exclusions = settings["commonexclusions"]
         exclusion_pattern = settings["exclusionpattern"]
         exclusion_regexes = display_exclusion_options(
@@ -317,16 +316,12 @@ def main():
         + " unique entries."
     )
 
-    move_file = prompt_for_move(
+    if move_file := prompt_for_move(
         final_file,
         auto=auto,
         replace=settings["replace"],
         skipstatichosts=skip_static_hosts,
-    )
-
-    # We only flush the DNS cache if we have
-    # moved a new hosts file into place.
-    if move_file:
+    ):
         prompt_for_flush_dns_cache(
             flush_cache=settings["flushdnscache"], prompt_flush=not auto
         )
@@ -375,7 +370,7 @@ def prompt_for_update(freshen, update_auto):
 
     if update_auto or query_yes_no(prompt):
         return True
-    elif not update_auto:
+    else:
         print("OK, we'll stick with what we've got locally.")
 
     return False
@@ -398,13 +393,13 @@ def prompt_for_exclusions(skip_prompt):
         custom domains beyond those in the whitelist.
     """
 
-    prompt = (
-        "Do you want to exclude any domains?\n"
-        "For example, hulu.com video streaming must be able to access "
-        "its tracking and ad servers in order to play video."
-    )
-
     if not skip_prompt:
+        prompt = (
+            "Do you want to exclude any domains?\n"
+            "For example, hulu.com video streaming must be able to access "
+            "its tracking and ad servers in order to play video."
+        )
+
         if query_yes_no(prompt):
             return True
         else:
@@ -426,11 +421,13 @@ def prompt_for_flush_dns_cache(flush_cache, prompt_flush):
         cache. Otherwise, the function returns immediately.
     """
 
-    if flush_cache:
+    if (
+        not flush_cache
+        and prompt_flush
+        and query_yes_no("Attempt to flush the DNS cache?")
+        or flush_cache
+    ):
         flush_dns_cache()
-    elif prompt_flush:
-        if query_yes_no("Attempt to flush the DNS cache?"):
-            flush_dns_cache()
 
 
 def prompt_for_move(final_file, **move_params):
@@ -530,7 +527,7 @@ def display_exclusion_options(common_exclusions, exclusion_pattern, exclusion_re
     """
 
     for exclusion_option in common_exclusions:
-        prompt = "Do you want to exclude the domain " + exclusion_option + " ?"
+        prompt = f"Do you want to exclude the domain {exclusion_option} ?"
 
         if query_yes_no(prompt):
             exclusion_regexes = exclude_domain(
@@ -638,11 +635,10 @@ def matches_exclusions(stripped_rule, exclusion_regexes):
         # Example: 'example.org' instead of '0.0.0.0 example.org'
         stripped_domain = stripped_rule
 
-    for exclusionRegex in exclusion_regexes:
-        if exclusionRegex.search(stripped_domain):
-            return True
-
-    return False
+    return any(
+        exclusionRegex.search(stripped_domain)
+        for exclusionRegex in exclusion_regexes
+    )
 
 
 # End Exclusion Logic
@@ -677,22 +673,18 @@ def update_sources_data(sources_data, **sources_params):
     for source in sort_sources(
         recursive_glob(sources_params["datapath"], source_data_filename)
     ):
-        update_file = open(source, "r", encoding="UTF-8")
-        update_data = json.load(update_file)
-        sources_data.append(update_data)
-        update_file.close()
-
+        with open(source, "r", encoding="UTF-8") as update_file:
+            update_data = json.load(update_file)
+            sources_data.append(update_data)
     for source in sources_params["extensions"]:
         source_dir = path_join_robust(sources_params["extensionspath"], source)
         for update_file_path in sort_sources(
             recursive_glob(source_dir, source_data_filename)
         ):
-            update_file = open(update_file_path, "r")
-            update_data = json.load(update_file)
+            with open(update_file_path, "r") as update_file:
+                update_data = json.load(update_file)
 
-            sources_data.append(update_data)
-            update_file.close()
-
+                sources_data.append(update_data)
     return sources_data
 
 
@@ -709,8 +701,7 @@ def jsonarray(json_array_string):
     """
 
     temp_list = json.loads(json_array_string)
-    hostlines = "127.0.0.1 " + "\n127.0.0.1 ".join(temp_list)
-    return hostlines
+    return "127.0.0.1 " + "\n127.0.0.1 ".join(temp_list)
 
 
 def update_all_sources(source_data_filename, host_filename):
@@ -735,15 +726,14 @@ def update_all_sources(source_data_filename, host_filename):
     all_sources = sort_sources(recursive_glob("*", source_data_filename))
 
     for source in all_sources:
-        update_file = open(source, "r", encoding="UTF-8")
-        update_data = json.load(update_file)
-        update_file.close()
+        with open(source, "r", encoding="UTF-8") as update_file:
+            update_data = json.load(update_file)
         update_url = update_data["url"]
         update_transforms = []
         if update_data.get("transforms"):
             update_transforms = update_data["transforms"]
 
-        print("Updating source " + os.path.dirname(source) + " from " + update_url)
+        print(f"Updating source {os.path.dirname(source)} from {update_url}")
 
         try:
             updated_file = get_file_by_url(update_url)
@@ -755,12 +745,11 @@ def update_all_sources(source_data_filename, host_filename):
             # get rid of carriage-return symbols
             updated_file = updated_file.replace("\r", "")
 
-            hosts_file = open(
+            with open(
                 path_join_robust(BASEDIR_PATH, os.path.dirname(source), host_filename),
                 "wb",
-            )
-            write_data(hosts_file, updated_file)
-            hosts_file.close()
+            ) as hosts_file:
+                write_data(hosts_file, updated_file)
         except Exception:
             print("Error in updating source: ", update_url)
 
@@ -781,8 +770,8 @@ def create_initial_file():
         recursive_glob(settings["datapath"], settings["hostfilename"])
     ):
 
-        start = "# Start {}\n\n".format(os.path.basename(os.path.dirname(source)))
-        end = "\n# End {}\n\n".format(os.path.basename(os.path.dirname(source)))
+        start = f"# Start {os.path.basename(os.path.dirname(source))}\n\n"
+        end = f"\n# End {os.path.basename(os.path.dirname(source))}\n\n"
 
         with open(source, "r", encoding="UTF-8") as curFile:
             write_data(merge_file, start + curFile.read() + end)
@@ -921,8 +910,6 @@ def remove_dups_and_excl(merge_file, exclusion_regexes, output_file=None):
     exclusions = settings["exclusions"]
 
     for line in merge_file.readlines():
-        write_line = True
-
         # Explicit encoding
         line = line.decode("UTF-8")
 
@@ -954,10 +941,10 @@ def remove_dups_and_excl(merge_file, exclusion_regexes, output_file=None):
             keep_domain_comments=settings["keepdomaincomments"],
         )
 
-        for exclude in exclusions:
-            if re.search(r"(^|[\s\.])" + re.escape(exclude) + r"\s", line):
-                write_line = False
-                break
+        write_line = not any(
+            re.search(r"(^|[\s\.])" + re.escape(exclude) + r"\s", line)
+            for exclude in exclusions
+        )
 
         if normalized_rule and (hostname not in hostnames) and write_line:
             write_data(final_file, normalized_rule)
@@ -993,8 +980,8 @@ def normalize_rule(rule, target_ip, keep_domain_comments):
     """
 
     def normalize_response(
-        extracted_hostname: str, extracted_suffix: Optional[str]
-    ) -> Tuple[str, str]:
+            extracted_hostname: str, extracted_suffix: Optional[str]
+        ) -> Tuple[str, str]:
         """
         Normalizes the responses after the provision of the extracted
         hostname and suffix - if exist.
@@ -1013,13 +1000,14 @@ def normalize_rule(rule, target_ip, keep_domain_comments):
             and spacing reformatted.
         """
 
-        rule = "%s %s" % (target_ip, extracted_hostname)
+        rule = f"{target_ip} {extracted_hostname}"
 
         if keep_domain_comments and extracted_suffix:
-            if not extracted_suffix.strip().startswith("#"):
-                rule += " #%s" % extracted_suffix
-            else:
-                rule += " %s" % extracted_suffix
+            rule += (
+                f" {extracted_suffix}"
+                if extracted_suffix.strip().startswith("#")
+                else f" #{extracted_suffix}"
+            )
 
         return extracted_hostname, rule + "\n"
 
@@ -1067,7 +1055,7 @@ def normalize_rule(rule, target_ip, keep_domain_comments):
     """
     finally, if we get here, just belch to screen
     """
-    print("==>%s<==" % rule)
+    print(f"==>{rule}<==")
     return None, None
 
 
@@ -1195,8 +1183,8 @@ def write_opening_header(final_file, **header_params):
         write_data(final_file, "0.0.0.0 0.0.0.0\n")
 
         if platform.system() == "Linux":
-            write_data(final_file, "127.0.1.1 " + socket.gethostname() + "\n")
-            write_data(final_file, "127.0.0.53 " + socket.gethostname() + "\n")
+            write_data(final_file, f"127.0.1.1 {socket.gethostname()}" + "\n")
+            write_data(final_file, f"127.0.0.53 {socket.gethostname()}" + "\n")
 
         write_data(final_file, "\n")
 
@@ -1229,9 +1217,7 @@ def update_readme_data(readme_file, **readme_updates):
     """
 
     extensions_key = "base"
-    extensions = readme_updates["extensions"]
-
-    if extensions:
+    if extensions := readme_updates["extensions"]:
         extensions_key = "-".join(extensions)
 
     output_folder = readme_updates["outputsubfolder"]
@@ -1312,7 +1298,7 @@ def flush_dns_cache():
         nscd_msg = "Flushing the DNS cache by restarting nscd {result}"
 
         for nscd_prefix in nscd_prefixes:
-            nscd_cache = nscd_prefix + "/init.d/nscd"
+            nscd_cache = f"{nscd_prefix}/init.d/nscd"
 
             if os.path.isfile(nscd_cache):
                 dns_cache_found = True
@@ -1323,9 +1309,9 @@ def flush_dns_cache():
                     print_success(nscd_msg.format(result="succeeded"))
 
         centos_file = "/etc/init.d/network"
-        centos_msg = "Flushing the DNS cache by restarting network {result}"
-
         if os.path.isfile(centos_file):
+            centos_msg = "Flushing the DNS cache by restarting network {result}"
+
             if subprocess.call(SUDO + [centos_file, "restart"]):
                 print_failure(centos_msg.format(result="failed"))
             else:
@@ -1336,22 +1322,24 @@ def flush_dns_cache():
         restarted_services = []
 
         for system_prefix in system_prefixes:
-            systemctl = system_prefix + "/bin/systemctl"
-            system_dir = system_prefix + "/lib/systemd/system"
+            systemctl = f"{system_prefix}/bin/systemctl"
+            system_dir = f"{system_prefix}/lib/systemd/system"
 
             for service_type in service_types:
-                service = service_type + ".service"
+                service = f"{service_type}.service"
                 if service in restarted_services:
                     continue
 
                 service_file = path_join_robust(system_dir, service)
-                service_msg = (
-                    "Flushing the DNS cache by restarting " + service + " {result}"
-                )
+                service_msg = (f"Flushing the DNS cache by restarting {service}" + " {result}")
 
                 if os.path.isfile(service_file):
-                    if 0 != subprocess.call(
-                        [systemctl, "status", service], stdout=subprocess.DEVNULL
+                    if (
+                        subprocess.call(
+                            [systemctl, "status", service],
+                            stdout=subprocess.DEVNULL,
+                        )
+                        != 0
                     ):
                         continue
                     dns_cache_found = True
@@ -1363,10 +1351,10 @@ def flush_dns_cache():
                     restarted_services.append(service)
 
         dns_clean_file = "/etc/init.d/dns-clean"
-        dns_clean_msg = "Flushing the DNS cache via dns-clean executable {result}"
-
         if os.path.isfile(dns_clean_file):
             dns_cache_found = True
+
+            dns_clean_msg = "Flushing the DNS cache via dns-clean executable {result}"
 
             if subprocess.call(SUDO + [dns_clean_file, "start"]):
                 print_failure(dns_clean_msg.format(result="failed"))
@@ -1394,9 +1382,7 @@ def remove_old_hosts_file(old_file_path, backup):
     open(old_file_path, "a").close()
 
     if backup:
-        backup_file_path = old_file_path + "-{}".format(
-            time.strftime("%Y-%m-%d-%H-%M-%S")
-        )
+        backup_file_path = (old_file_path + f'-{time.strftime("%Y-%m-%d-%H-%M-%S")}')
 
         # Make a backup copy, marking the date in which the list was updated
         shutil.copy(old_file_path, backup_file_path)
@@ -1439,54 +1425,54 @@ def domain_to_idna(line):
         - The following also split the trailing comment of a given line.
     """
 
-    if not line.startswith("#"):
-        tabs = "\t"
-        space = " "
+    if line.startswith("#"):
+        return line.encode("UTF-8").decode("UTF-8")
+    tabs = "\t"
+    space = " "
 
-        tabs_position, space_position = (line.find(tabs), line.find(space))
+    tabs_position, space_position = (line.find(tabs), line.find(space))
 
-        if tabs_position > -1 and space_position > -1:
-            if space_position < tabs_position:
-                separator = space
-            else:
-                separator = tabs
-        elif not tabs_position == -1:
-            separator = tabs
-        elif not space_position == -1:
-            separator = space
-        else:
-            separator = ""
+    if (
+        tabs_position > -1
+        and space_position > -1
+        and space_position < tabs_position
+        or (tabs_position <= -1 or space_position <= -1)
+        and tabs_position == -1
+        and space_position != -1
+    ):
+        separator = space
+    elif tabs_position > -1 and space_position > -1 or tabs_position != -1:
+        separator = tabs
+    else:
+        separator = ""
 
-        if separator:
-            splited_line = line.split(separator)
+    if separator:
+        splited_line = line.split(separator)
 
-            try:
-                index = 1
-                while index < len(splited_line):
-                    if splited_line[index]:
-                        break
-                    index += 1
+        try:
+            index = 1
+            while index < len(splited_line) and not splited_line[index]:
+                index += 1
 
-                if "#" in splited_line[index]:
-                    index_comment = splited_line[index].find("#")
+            if "#" in splited_line[index]:
+                index_comment = splited_line[index].find("#")
 
-                    if index_comment > -1:
-                        comment = splited_line[index][index_comment:]
+                if index_comment > -1:
+                    comment = splited_line[index][index_comment:]
 
-                        splited_line[index] = (
-                            splited_line[index]
-                            .split(comment)[0]
-                            .encode("IDNA")
-                            .decode("UTF-8")
-                            + comment
-                        )
+                    splited_line[index] = (
+                        splited_line[index]
+                        .split(comment)[0]
+                        .encode("IDNA")
+                        .decode("UTF-8")
+                        + comment
+                    )
 
-                splited_line[index] = splited_line[index].encode("IDNA").decode("UTF-8")
-            except IndexError:
-                pass
-            return separator.join(splited_line)
-        return line.encode("IDNA").decode("UTF-8")
-    return line.encode("UTF-8").decode("UTF-8")
+            splited_line[index] = splited_line[index].encode("IDNA").decode("UTF-8")
+        except IndexError:
+            pass
+        return separator.join(splited_line)
+    return line.encode("IDNA").decode("UTF-8")
 
 
 # Helper Functions
@@ -1505,7 +1491,7 @@ def maybe_copy_example_file(file_path):
     """
 
     if not os.path.isfile(file_path):
-        example_file_path = file_path + ".example"
+        example_file_path = f"{file_path}.example"
         if os.path.isfile(example_file_path):
             shutil.copyfile(example_file_path, file_path)
 
@@ -1535,12 +1521,11 @@ def get_file_by_url(url, params=None, **kwargs):
     try:
         req = requests.get(url=url, params=params, **kwargs)
     except requests.exceptions.RequestException:
-        print("Error retrieving data from {}".format(url))
+        print(f"Error retrieving data from {url}")
         return None
 
     req.encoding = req.apparent_encoding
-    res_text = "\n".join([domain_to_idna(line) for line in req.text.split("\n")])
-    return res_text
+    return "\n".join([domain_to_idna(line) for line in req.text.split("\n")])
 
 
 def write_data(f, data):
@@ -1593,7 +1578,7 @@ def query_yes_no(question, default="yes"):
     """
 
     valid = {"yes": "yes", "y": "yes", "ye": "yes", "no": "no", "n": "no"}
-    prompt = {None: " [y/n] ", "yes": " [Y/n] ", "no": " [y/N] "}.get(default, None)
+    prompt = {None: " [y/n] ", "yes": " [Y/n] ", "no": " [y/N] "}.get(default)
 
     if not prompt:
         raise ValueError("invalid default answer: '%s'" % default)
@@ -1639,9 +1624,12 @@ def is_valid_user_provided_domain_format(domain):
 
     if domain_regex.match(domain):
         print(
-            "The domain " + domain + " is not valid. Do not include "
-            "www.domain.com or http(s)://domain.com. Try again."
+            (
+                f"The domain {domain}" + " is not valid. Do not include "
+                "www.domain.com or http(s)://domain.com. Try again."
+            )
         )
+
         return False
     else:
         return True
@@ -1665,15 +1653,17 @@ def recursive_glob(stem, file_pattern):
     """
 
     if sys.version_info >= (3, 5):
-        return glob(stem + "/**/" + file_pattern, recursive=True)
-    else:
+        return glob(f"{stem}/**/{file_pattern}", recursive=True)
         # gh-316: this will avoid invalid unicode comparisons in Python 2.x
-        if stem == str("*"):
-            stem = "."
-        matches = []
-        for root, dirnames, filenames in os.walk(stem):
-            for filename in fnmatch.filter(filenames, file_pattern):
-                matches.append(path_join_robust(root, filename))
+    if stem == "*":
+        stem = "."
+    matches = []
+    for root, dirnames, filenames in os.walk(stem):
+        matches.extend(
+            path_join_robust(root, filename)
+            for filename in fnmatch.filter(filenames, file_pattern)
+        )
+
     return matches
 
 
@@ -1764,10 +1754,7 @@ def colorize(text, color):
         The wrapped string to display in color, if possible.
     """
 
-    if not supports_color():
-        return text
-
-    return color + text + Colors.ENDC
+    return color + text + Colors.ENDC if supports_color() else text
 
 
 def print_success(text):

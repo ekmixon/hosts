@@ -67,16 +67,15 @@ def main():
 
     for key in keys:
         extensions = key.replace("-", ", ")
-        extensions_str = "* Extensions: **" + extensions + "**."
-        extensions_header = "with " + extensions + " extensions"
+        extensions_str = f"* Extensions: **{extensions}**."
+        extensions_header = f"with {extensions} extensions"
 
         source_rows = ""
         source_list = data[key]["sourcesdata"]
 
         for source in source_list:
-            this_row = {}
-            this_row.update(row_defaults)
-            this_row.update(source)
+            this_row = dict(row_defaults)
+            this_row |= source
             source_rows += t.substitute(this_row) + "\n"
 
         with open(
